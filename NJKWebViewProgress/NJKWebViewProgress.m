@@ -9,13 +9,13 @@
 
 NSString *completeRPCURLPath = @"/njkwebviewprogressproxy/complete";
 
-const float NJKInitialProgressValue = 0.1f;
-const float NJKInteractiveProgressValue = 0.5f;
-const float NJKFinalProgressValue = 0.9f;
+const float NJKInitialProgressValue = 0.9f;//0.1f;
+const float NJKInteractiveProgressValue = 0.7f;//0.5f;
+const float NJKFinalProgressValue = 1.0f;//0.9f;
 
 @implementation NJKWebViewProgress
 {
-    NSUInteger _loadingCount;
+    float _loadingCount;
     NSUInteger _maxLoadCount;
     NSURL *_currentURL;
     BOOL _interactive;
@@ -40,12 +40,14 @@ const float NJKFinalProgressValue = 0.9f;
 
 - (void)incrementProgress
 {
+#warning exc_bad_access...
     float progress = self.progress;
     float maxProgress = _interactive ? NJKFinalProgressValue : NJKInteractiveProgressValue;
     float remainPercent = (float)_loadingCount / (float)_maxLoadCount;
     float increment = (maxProgress - progress) * remainPercent;
     progress += increment;
     progress = fmin(progress, maxProgress);
+//    progress = progress + progress;
     [self setProgress:progress];
 }
 
@@ -56,8 +58,10 @@ const float NJKFinalProgressValue = 0.9f;
 
 - (void)setProgress:(float)progress
 {
+
     // progress should be incremental only
     if (progress > _progress || progress == 0) {
+      
         _progress = progress;
         if ([_progressDelegate respondsToSelector:@selector(webViewProgress:updateProgress:)]) {
             [_progressDelegate webViewProgress:self updateProgress:progress];
@@ -98,8 +102,8 @@ const float NJKFinalProgressValue = 0.9f;
 
     BOOL isTopLevelNavigation = [request.mainDocumentURL isEqual:request.URL];
 
-    BOOL isHTTPOrLocalFile = [request.URL.scheme isEqualToString:@"http"] || [request.URL.scheme isEqualToString:@"https"] || [request.URL.scheme isEqualToString:@"file"];
-    if (ret && !isFragmentJump && isHTTPOrLocalFile && isTopLevelNavigation) {
+    BOOL isHTTP = [request.URL.scheme isEqualToString:@"http"] || [request.URL.scheme isEqualToString:@"https"];
+    if (ret && !isFragmentJump && isHTTP && isTopLevelNavigation) {
         _currentURL = request.URL;
         [self reset];
     }
@@ -112,7 +116,7 @@ const float NJKFinalProgressValue = 0.9f;
         [_webViewProxyDelegate webViewDidStartLoad:webView];
     }
 
-    _loadingCount++;
+    _loadingCount += 0.5;
     _maxLoadCount = fmax(_maxLoadCount, _loadingCount);
 
     [self startProgress];
@@ -124,10 +128,26 @@ const float NJKFinalProgressValue = 0.9f;
         [_webViewProxyDelegate webViewDidFinishLoad:webView];
     }
     
-    _loadingCount--;
-    [self incrementProgress];
+//    _loadingCount--;
+    _loadingCount -= 0.5;
+#warning 加入webview被中断执行的处理函数
+#warning 建立baseWebViewCorl didLoad函数执行compleProgress
+   
     
-    NSString *readyState = [webView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+    NSString *readyState =  nil;
+    
+    @try {
+        //        [self incrementProgress];
+        readyState = [webView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+    }
+    @catch (NSException *exception) {
+        
+    }
+    @finally {
+        
+    };
+    
+    
 
     BOOL interactive = [readyState isEqualToString:@"interactive"];
     if (interactive) {
@@ -135,6 +155,7 @@ const float NJKFinalProgressValue = 0.9f;
         NSString *waitForCompleteJS = [NSString stringWithFormat:@"window.addEventListener('load',function() { var iframe = document.createElement('iframe'); iframe.style.display = 'none'; iframe.src = '%@://%@%@'; document.body.appendChild(iframe);  }, false);", webView.request.mainDocumentURL.scheme, webView.request.mainDocumentURL.host, completeRPCURLPath];
         [webView stringByEvaluatingJavaScriptFromString:waitForCompleteJS];
     }
+    
     
     BOOL isNotRedirect = _currentURL && [_currentURL isEqual:webView.request.mainDocumentURL];
     BOOL complete = [readyState isEqualToString:@"complete"];
@@ -150,9 +171,22 @@ const float NJKFinalProgressValue = 0.9f;
     }
     
     _loadingCount--;
-    [self incrementProgress];
+    
+    NSString *readyState = nil;
+    
+    @try {
+//        [self incrementProgress];
+        readyState = [webView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+    }
+    @catch (NSException *exception) {
+        
+    }
+    @finally {
+        
+    };
+    
 
-    NSString *readyState = [webView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+   
 
     BOOL interactive = [readyState isEqualToString:@"interactive"];
     if (interactive) {
